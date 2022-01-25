@@ -1,21 +1,17 @@
 {
-  "name": "pancake-subgraph",
-  "description": "PancakeSwap Subgraph",
+  "name": "nomiswap-subgraph",
+  "description": "Nomiswap Subgraph",
   "version": "2.0.0",
   "private": true,
-  "repository": "git@github.com:pancakeswap/pancake-subgraph.git",
-  "author": "PancakeSwap",
+  "repository": "git@github.com:chopachom/nomiswap-subgraph.git",
   "license": "GPL-3.0-or-later",
   "workspaces": [
     "subgraphs/**/*"
   ],
   "scripts": {
-    "codegen": "lerna run codegen",
-    "build": "lerna run build",
     "format:check": "prettier --check '*/**/*.{js,ts}'",
     "format:write": "prettier --write '*/**/*.{js,ts}'",
-    "lint": "eslint '*/**/*.{js,ts}'",
-    "prepare": "husky install"
+    "lint": "eslint '*/**/*.{js,ts}'"
   },
   "devDependencies": {
     "@commitlint/cli": "^13.1.0",

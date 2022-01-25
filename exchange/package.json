@@ -1,0 +1,12 @@
+{
+  "name": "exchange",
+  "description": "Nomiswap Subgraph",
+  "version": "1.0.0",
+  "repository": "git@github.com:chopachom/nomiswap-subgraph.git",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "codegen": "graph codegen subgraph.yaml",
+    "build": "graph build subgraph.yaml",
+    "deploy": "graph deploy --product hosted-service --node https://api.thegraph.com/deploy/  chopachom/nomiswap-exchange subgraph.yaml"
+  }
+}
