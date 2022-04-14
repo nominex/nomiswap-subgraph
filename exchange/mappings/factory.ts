@@ -1,5 +1,5 @@
 /* eslint-disable prefer-const */
-import { NomiswapFactory, Pair, Token, Bundle } from "../generated/schema";
+import { NomiswapFactory, Pair, Token, } from "../generated/schema";
 import { Pair as PairTemplate } from "../generated/templates";
 import { PairCreated } from "../generated/Factory/Factory";
 import {
@@ -18,16 +18,12 @@ export function handlePairCreated(event: PairCreated): void {
     factory = new NomiswapFactory(FACTORY_ADDRESS);
     factory.totalPairs = ZERO_BI;
     factory.totalTransactions = ZERO_BI;
-    factory.totalVolumeBNB = ZERO_BD;
     factory.totalLiquidityBNB = ZERO_BD;
     factory.totalVolumeUSD = ZERO_BD;
     factory.untrackedVolumeUSD = ZERO_BD;
     factory.totalLiquidityUSD = ZERO_BD;
-
-    let bundle = new Bundle("1");
-    bundle.bnbPrice = ZERO_BD;
-    bundle.save();
   }
+  
   factory.totalPairs = factory.totalPairs.plus(ONE_BI);
   factory.save();
 
@@ -41,13 +37,6 @@ export function handlePairCreated(event: PairCreated): void {
       return;
     }
     token0.decimals = decimals;
-    token0.derivedBNB = ZERO_BD;
-    token0.derivedUSD = ZERO_BD;
-    token0.tradeVolume = ZERO_BD;
-    token0.tradeVolumeUSD = ZERO_BD;
-    token0.untrackedVolumeUSD = ZERO_BD;
-    token0.totalLiquidity = ZERO_BD;
-    token0.totalTransactions = ZERO_BI;
     token0.save();
   }
 
@@ -61,13 +50,6 @@ export function handlePairCreated(event: PairCreated): void {
       return;
     }
     token1.decimals = decimals;
-    token1.derivedBNB = ZERO_BD;
-    token1.derivedUSD = ZERO_BD;
-    token1.tradeVolume = ZERO_BD;
-    token1.tradeVolumeUSD = ZERO_BD;
-    token1.untrackedVolumeUSD = ZERO_BD;
-    token1.totalLiquidity = ZERO_BD;
-    token1.totalTransactions = ZERO_BI;
     token1.save();
   }
 
@@ -78,16 +60,6 @@ export function handlePairCreated(event: PairCreated): void {
   pair.totalTransactions = ZERO_BI;
   pair.reserve0 = ZERO_BD;
   pair.reserve1 = ZERO_BD;
-  pair.trackedReserveBNB = ZERO_BD;
-  pair.reserveBNB = ZERO_BD;
-  pair.reserveUSD = ZERO_BD;
-  pair.totalSupply = ZERO_BD;
-  pair.volumeToken0 = ZERO_BD;
-  pair.volumeToken1 = ZERO_BD;
-  pair.volumeUSD = ZERO_BD;
-  pair.untrackedVolumeUSD = ZERO_BD;
-  pair.token0Price = ZERO_BD;
-  pair.token1Price = ZERO_BD;
   pair.block = event.block.number;
   pair.timestamp = event.block.timestamp;
   pair.save();

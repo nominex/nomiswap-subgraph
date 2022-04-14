@@ -1,31 +1,28 @@
 /* eslint-disable prefer-const */
 import { PairHourData } from "../generated/schema";
 import { BigInt, BigDecimal, ethereum } from "@graphprotocol/graph-ts";
-import { Pair, Bundle, Token, NomiswapFactory, NomiswapDayData, PairDayData, TokenDayData } from "../generated/schema";
+import { Pair, Token, NomiswapFactory, NomiswapDayData, PairDayData, TokenDayData } from "../generated/schema";
 import { ONE_BI, ZERO_BD, ZERO_BI, FACTORY_ADDRESS } from "./utils";
 
 export function updateNomiswapDayData(event: ethereum.Event): NomiswapDayData {
-  let Nomiswap = NomiswapFactory.load(FACTORY_ADDRESS);
+  let nomiswap = NomiswapFactory.load(FACTORY_ADDRESS)!;
   let timestamp = event.block.timestamp.toI32();
   let dayID = timestamp / 86400;
   let dayStartTimestamp = dayID * 86400;
 
-  let NomiswapDayData = NomiswapDayData.load(dayID.toString());
-  if (NomiswapDayData === null) {
-    NomiswapDayData = new NomiswapDayData(dayID.toString());
-    NomiswapDayData.date = dayStartTimestamp;
-    NomiswapDayData.dailyVolumeUSD = ZERO_BD;
-    NomiswapDayData.dailyVolumeBNB = ZERO_BD;
-    NomiswapDayData.totalVolumeUSD = ZERO_BD;
-    NomiswapDayData.totalVolumeBNB = ZERO_BD;
-    NomiswapDayData.dailyVolumeUntracked = ZERO_BD;
-  }
-  NomiswapDayData.totalLiquidityUSD = Nomiswap.totalLiquidityUSD;
-  NomiswapDayData.totalLiquidityBNB = Nomiswap.totalLiquidityBNB;
-  NomiswapDayData.totalTransactions = Nomiswap.totalTransactions;
-  NomiswapDayData.save();
+  let nomiswapDayData = NomiswapDayData.load(dayID.toString());
+  if (nomiswapDayData === null) {
+    nomiswapDayData = new NomiswapDayData(dayID.toString());
+    nomiswapDayData.date = dayStartTimestamp;
+    nomiswapDayData.dailyVolumeUSD = ZERO_BD;
+    nomiswapDayData.totalVolumeUSD = ZERO_BD;
 
-  return NomiswapDayData as NomiswapDayData;
+  }
+  nomiswapDayData.totalLiquidityUSD = nomiswap.totalLiquidityUSD;
+  nomiswapDayData.totalTransactions = nomiswap.totalTransactions;
+  nomiswapDayData.save();
+
+  return nomiswapDayData;
 }
 
 export function updatePairDayData(event: ethereum.Event): PairDayData {
@@ -33,7 +30,7 @@ export function updatePairDayData(event: ethereum.Event): PairDayData {
   let dayID = timestamp / 86400;
   let dayStartTimestamp = dayID * 86400;
   let dayPairID = event.address.toHex().concat("-").concat(BigInt.fromI32(dayID).toString());
-  let pair = Pair.load(event.address.toHex());
+  let pair = Pair.load(event.address.toHex())!;
   let pairDayData = PairDayData.load(dayPairID);
   if (pairDayData === null) {
     pairDayData = new PairDayData(dayPairID);
@@ -46,10 +43,10 @@ export function updatePairDayData(event: ethereum.Event): PairDayData {
     pairDayData.dailyVolumeUSD = ZERO_BD;
     pairDayData.dailyTxns = ZERO_BI;
   }
-  pairDayData.totalSupply = pair.totalSupply;
+//   pairDayData.totalSupply = pair.totalSupply;
   pairDayData.reserve0 = pair.reserve0;
   pairDayData.reserve1 = pair.reserve1;
-  pairDayData.reserveUSD = pair.reserveUSD;
+  pairDayData.reserveUSD = pair.reserve0LiquidityUSD.plus(pair.reserve1LiquidityUSD);
   pairDayData.dailyTxns = pairDayData.dailyTxns.plus(ONE_BI);
   pairDayData.save();
 
@@ -61,7 +58,7 @@ export function updatePairHourData(event: ethereum.Event): PairHourData {
   let hourIndex = timestamp / 3600;
   let hourStartUnix = hourIndex * 3600;
   let hourPairID = event.address.toHex().concat("-").concat(BigInt.fromI32(hourIndex).toString());
-  let pair = Pair.load(event.address.toHex());
+  let pair = Pair.load(event.address.toHex())!;
   let pairHourData = PairHourData.load(hourPairID);
   if (pairHourData === null) {
     pairHourData = new PairHourData(hourPairID);
@@ -72,10 +69,10 @@ export function updatePairHourData(event: ethereum.Event): PairHourData {
     pairHourData.hourlyVolumeUSD = ZERO_BD;
     pairHourData.hourlyTxns = ZERO_BI;
   }
-  pairHourData.totalSupply = pair.totalSupply;
+//   pairHourData.totalSupply = pair.totalSupply;
   pairHourData.reserve0 = pair.reserve0;
   pairHourData.reserve1 = pair.reserve1;
-  pairHourData.reserveUSD = pair.reserveUSD;
+  pairHourData.reserveUSD = pair.reserve0LiquidityUSD.plus(pair.reserve1LiquidityUSD);;
   pairHourData.hourlyTxns = pairHourData.hourlyTxns.plus(ONE_BI);
   pairHourData.save();
 
@@ -83,7 +80,6 @@ export function updatePairHourData(event: ethereum.Event): PairHourData {
 }
 
 export function updateTokenDayData(token: Token, event: ethereum.Event): TokenDayData {
-  let bundle = Bundle.load("1");
   let timestamp = event.block.timestamp.toI32();
   let dayID = timestamp / 86400;
   let dayStartTimestamp = dayID * 86400;
@@ -94,17 +90,18 @@ export function updateTokenDayData(token: Token, event: ethereum.Event): TokenDa
     tokenDayData = new TokenDayData(tokenDayID);
     tokenDayData.date = dayStartTimestamp;
     tokenDayData.token = token.id;
-    tokenDayData.priceUSD = token.derivedBNB.times(bundle.bnbPrice);
+    tokenDayData.priceUSD = token.derivedUSD;
     tokenDayData.dailyVolumeToken = ZERO_BD;
-    tokenDayData.dailyVolumeBNB = ZERO_BD;
+    // tokenDayData.dailyVolumeBNB = ZERO_BD;
     tokenDayData.dailyVolumeUSD = ZERO_BD;
     tokenDayData.dailyTxns = ZERO_BI;
     tokenDayData.totalLiquidityUSD = ZERO_BD;
   }
-  tokenDayData.priceUSD = token.derivedBNB.times(bundle.bnbPrice);
+  // TODO: maybe it'll be more correct to use mean price
+  tokenDayData.priceUSD = token.derivedUSD;
   tokenDayData.totalLiquidityToken = token.totalLiquidity;
-  tokenDayData.totalLiquidityBNB = token.totalLiquidity.times(token.derivedBNB as BigDecimal);
-  tokenDayData.totalLiquidityUSD = tokenDayData.totalLiquidityBNB.times(bundle.bnbPrice);
+//   tokenDayData.totalLiquidityBNB = token.totalLiquidity.times(token.derivedBNB as BigDecimal);
+  tokenDayData.totalLiquidityUSD = token.trackedTotalLiquidityUSD;
   tokenDayData.dailyTxns = tokenDayData.dailyTxns.plus(ONE_BI);
   tokenDayData.save();
 
