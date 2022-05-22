@@ -15,6 +15,148 @@ import { updateNomiswapDayData, updatePairDayData, updatePairHourData, updateTok
 import { deriveUSDPrice, getTrackedVolumeUSD, getTrackedLiquidityUSD, getBnbPriceInUSD } from "./pricing";
 import { convertTokenToDecimal, ADDRESS_ZERO, FACTORY_ADDRESS, ONE_BI, ZERO_BD, BI_18 } from "./utils";
 
+function isCompleteMint(mintId: string): boolean {
+  return (MintEvent.load(mintId) as MintEvent).sender !== null; // sufficient checks
+}
+
+export function handleTransfer(event: Transfer): void {
+  // Initial liquidity.
+  if (event.params.to.toHex() == ADDRESS_ZERO && event.params.value.equals(BigInt.fromI32(1000))) {
+    return;
+  }
+
+  // get pair and load contract
+  let pair = Pair.load(event.address.toHex());
+  if (!pair) {
+    log.debug("transfer event, but pair doesn't exist: {}", [event.address.toHex()])
+    return
+  }
+
+  // liquidity token amount being transferred
+  let value = convertTokenToDecimal(event.params.value, BI_18);
+
+  // get or create transaction
+  let transaction = Transaction.load(event.transaction.hash.toHex());
+  if (transaction === null) {
+    transaction = new Transaction(event.transaction.hash.toHex());
+    transaction.block = event.block.number;
+    transaction.timestamp = event.block.timestamp;
+    transaction.mints = [];
+    transaction.burns = [];
+    transaction.swaps = [];
+  }
+
+  // mints
+  let mints = transaction.mints;
+  if (event.params.from.toHex() == ADDRESS_ZERO) {
+    // create new mint if no mints so far or if last one is done already
+    if (mints.length === 0 || isCompleteMint(mints[mints.length - 1])) {
+      let mint = new MintEvent(
+          event.transaction.hash.toHex().concat("-").concat(BigInt.fromI32(mints.length).toString())
+      );
+      mint.transaction = transaction.id;
+      mint.pair = pair.id;
+      mint.to = event.params.to;
+      mint.liquidity = value;
+      mint.timestamp = transaction.timestamp;
+      mint.transaction = transaction.id;
+      mint.save();
+
+      // update mints in transaction
+      transaction.mints = mints.concat([mint.id]);
+
+      // save entities
+      transaction.save();
+    }
+  }
+
+  // case where direct send first on BNB withdrawals
+  if (event.params.to.toHex() == pair.id) {
+    let burns = transaction.burns;
+    let burn = new BurnEvent(
+        event.transaction.hash.toHex().concat("-").concat(BigInt.fromI32(burns.length).toString())
+    );
+    burn.transaction = transaction.id;
+    burn.pair = pair.id;
+    burn.liquidity = value;
+    burn.timestamp = transaction.timestamp;
+    burn.to = event.params.to;
+    burn.sender = event.params.from;
+    burn.needsComplete = true;
+    burn.transaction = transaction.id;
+    burn.save();
+
+    // TODO: Consider using .concat() for handling array updates to protect
+    // against unintended side effects for other code paths.
+    burns.push(burn.id);
+    transaction.burns = burns;
+    transaction.save();
+  }
+
+  // burn
+  if (event.params.to.toHex() == ADDRESS_ZERO && event.params.from.toHex() == pair.id) {
+    // this is a new instance of a logical burn
+    let burns = transaction.burns;
+    let burn: BurnEvent;
+    if (burns.length > 0) {
+      let currentBurn = BurnEvent.load(burns[burns.length - 1]) as BurnEvent;
+      if (currentBurn.needsComplete) {
+        burn = currentBurn as BurnEvent;
+      } else {
+        burn = new BurnEvent(
+            event.transaction.hash.toHex().concat("-").concat(BigInt.fromI32(burns.length).toString())
+        );
+        burn.transaction = transaction.id;
+        burn.needsComplete = false;
+        burn.pair = pair.id;
+        burn.liquidity = value;
+        burn.transaction = transaction.id;
+        burn.timestamp = transaction.timestamp;
+      }
+    } else {
+      burn = new BurnEvent(event.transaction.hash.toHex().concat("-").concat(BigInt.fromI32(burns.length).toString()));
+      burn.transaction = transaction.id;
+      burn.needsComplete = false;
+      burn.pair = pair.id;
+      burn.liquidity = value;
+      burn.transaction = transaction.id;
+      burn.timestamp = transaction.timestamp;
+    }
+
+    // if this logical burn included a fee mint, account for this
+    if (mints.length !== 0 && !isCompleteMint(mints[mints.length - 1])) {
+      let mint = MintEvent.load(mints[mints.length - 1]) as MintEvent;
+      burn.feeTo = mint.to;
+      burn.feeLiquidity = mint.liquidity;
+      // remove the logical mint
+      store.remove("Mint", mints[mints.length - 1]);
+      // update the transaction
+
+      // TODO: Consider using .slice().pop() to protect against unintended
+      // side effects for other code paths.
+      mints.pop();
+      transaction.mints = mints;
+      transaction.save();
+    }
+    burn.save();
+    // if accessing last one, replace it
+    if (burn.needsComplete) {
+      // TODO: Consider using .slice(0, -1).concat() to protect against
+      // unintended side effects for other code paths.
+      burns[burns.length - 1] = burn.id;
+    }
+    // else add new one
+    else {
+      // TODO: Consider using .concat() for handling array updates to protect
+      // against unintended side effects for other code paths.
+      burns.push(burn.id);
+    }
+    transaction.burns = burns;
+    transaction.save();
+  }
+
+  transaction.save();
+}
 
 export function handleSync(event: Sync): void {
   let pair = Pair.load(event.address.toHex());
@@ -230,7 +372,7 @@ export function handleMint(event: Mint): void {
   pair.save();
   factory.save();
 
-  mint.to = event.params.sender;
+  mint.sender = event.params.sender;
   mint.amount0 = token0Amount;
   mint.amount1 = token1Amount;
   mint.logIndex = event.logIndex;
@@ -303,7 +445,6 @@ export function handleBurn(event: Burn): void {
   factory.save();
 
   // update burn
-  burn.sender = event.params.sender
   burn.amount0 = token0Amount;
   burn.amount1 = token1Amount;
   burn.logIndex = event.logIndex;
@@ -389,6 +530,8 @@ export function handleSwap(event: Swap): void {
     transaction.block = event.block.number;
     transaction.timestamp = event.block.timestamp;
     transaction.swaps = [];
+    transaction.mints = [];
+    transaction.burns = [];
   }
   let swaps = transaction.swaps;
   let swap = new SwapEvent(event.transaction.hash.toHex().concat("-").concat(BigInt.fromI32(swaps.length).toString()));
