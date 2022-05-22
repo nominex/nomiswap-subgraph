@@ -19,12 +19,12 @@ type NomiswapFactory @entity {
   totalLiquidityBNB: BigDecimal!
 }
 
-# type Bundle @entity {
-#   id: ID!
+type Bundle @entity {
+  id: ID!
 
-#   "BNB price, in USD"
-#   bnbPrice: BigDecimal!
-# }
+  "BNB price, in USD"
+  bnbPrice: BigDecimal!
+}
 
 type Token @entity {
   id: ID!
@@ -53,7 +53,7 @@ type Token @entity {
 
 
   # derived prices
-  # derivedBNB: BigDecimal
+  derivedBNB: BigDecimal!
   derivedUSD: BigDecimal!
 
   # derived fields
@@ -82,12 +82,13 @@ type Pair @entity {
   # totalSupply: BigDecimal!
 
   # derived liquidity
-  # reserveBNB: BigDecimal!
-  # reserveUSD: BigDecimal!
-  # trackedReserveBNB: BigDecimal! # used for separating per pair reserves and global
+  reserveBNB: BigDecimal!
+  reserveUSD: BigDecimal!
+  trackedReserveBNB: BigDecimal! # used for separating per pair reserves and global
+  trackedReserveUSD: BigDecimal! # used for separating per pair reserves and global
   # Price in terms of the asset pair
-  # token0Price: BigDecimal!
-  # token1Price: BigDecimal!
+  token0Price: BigDecimal!
+  token1Price: BigDecimal!
 
   # lifetime volume stats
   volumeToken0: BigDecimal!
@@ -101,9 +102,9 @@ type Pair @entity {
 
   # derived fields
   # pairHourData: [PairHourData!]! @derivedFrom(field: "pair")
-  # mints: [Mint!]! @derivedFrom(field: "pair")
-  # burns: [Burn!]! @derivedFrom(field: "pair")
-  # swaps: [Swap!]! @derivedFrom(field: "pair")
+  mints: [Mint!]! @derivedFrom(field: "pair")
+  burns: [Burn!]! @derivedFrom(field: "pair")
+  swaps: [Swap!]! @derivedFrom(field: "pair")
 }
 
 type Transaction @entity {
@@ -113,61 +114,61 @@ type Transaction @entity {
   timestamp: BigInt!
   # This is not the reverse of Mint.transaction; it is only used to
   # track incomplete mints (similar for burns and swaps)
-  # mints: [Mint!]!
-  # burns: [Burn!]!
+  mints: [Mint!]!
+  burns: [Burn!]!
   swaps: [Swap!]!
 }
 
-# type Mint @entity {
-#   # transaction hash + "-" + index in mints Transaction array
-#   id: ID!
-#   transaction: Transaction!
-#   timestamp: BigInt! # need this to pull recent txns for specific token or pair
-#   pair: Pair!
+type Mint @entity {
+  # transaction hash + "-" + index in mints Transaction array
+  id: ID!
+  transaction: Transaction!
+  timestamp: BigInt! # need this to pull recent txns for specific token or pair
+  pair: Pair!
 
-#   # populated from the primary Transfer event
-#   to: Bytes!
-#   liquidity: BigDecimal!
+  # populated from the primary Transfer event
+  to: Bytes!
+  liquidity: BigDecimal!
 
-#   # populated from the Mint event
-#   sender: Bytes
-#   amount0: BigDecimal
-#   amount1: BigDecimal
-#   logIndex: BigInt
-#   # derived amount based on available prices of tokens
-#   amountUSD: BigDecimal
+  # populated from the Mint event
+  sender: Bytes
+  amount0: BigDecimal
+  amount1: BigDecimal
+  logIndex: BigInt
+  # derived amount based on available prices of tokens
+  amountUSD: BigDecimal
 
-#   # optional fee fields, if a Transfer event is fired in _mintFee
-#   feeTo: Bytes
-#   feeLiquidity: BigDecimal
-# }
+  # optional fee fields, if a Transfer event is fired in _mintFee
+  feeTo: Bytes
+  feeLiquidity: BigDecimal
+}
 
-# type Burn @entity {
-#   # transaction hash + "-" + index in mints Transaction array
-#   id: ID!
-#   transaction: Transaction!
-#   timestamp: BigInt! # need this to pull recent txns for specific token or pair
-#   pair: Pair!
+type Burn @entity {
+  # transaction hash + "-" + index in mints Transaction array
+  id: ID!
+  transaction: Transaction!
+  timestamp: BigInt! # need this to pull recent txns for specific token or pair
+  pair: Pair!
 
-#   # populated from the primary Transfer event
-#   liquidity: BigDecimal!
+  # populated from the primary Transfer event
+  liquidity: BigDecimal!
 
-#   # populated from the Burn event
-#   sender: Bytes
-#   amount0: BigDecimal
-#   amount1: BigDecimal
-#   to: Bytes
-#   logIndex: BigInt
-#   # derived amount based on available prices of tokens
-#   amountUSD: BigDecimal
+  # populated from the Burn event
+  sender: Bytes
+  amount0: BigDecimal
+  amount1: BigDecimal
+  to: Bytes
+  logIndex: BigInt
+  # derived amount based on available prices of tokens
+  amountUSD: BigDecimal
 
-#   # mark uncomplete in BNB case
-#   needsComplete: Boolean!
+  # mark uncomplete in BNB case
+  needsComplete: Boolean!
 
-#   # optional fee fields, if a Transfer event is fired in _mintFee
-#   feeTo: Bytes
-#   feeLiquidity: BigDecimal
-# }
+  # optional fee fields, if a Transfer event is fired in _mintFee
+  feeTo: Bytes
+  feeLiquidity: BigDecimal
+}
 
 type Swap @entity {
   # transaction hash + "-" + index in swaps Transaction array
