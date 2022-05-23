@@ -193,6 +193,10 @@ export function handleSync(event: Sync): void {
   bundle.bnbPrice = bnbPrice;
   bundle.save();
 
+  // reset factory liquidity by subtracting only tracked liquidity
+  factory.totalLiquidityUSD = factory.totalLiquidityUSD.minus(pair.trackedReserveUSD);
+  factory.totalLiquidityBNB = factory.totalLiquidityBNB.minus(pair.trackedReserveBNB);
+
   // reset token total liquidity amounts
   // if this is the first SYNC event for this pair
   // then both reserves are 0 and this operation doesnt have an effect
@@ -477,6 +481,12 @@ export function handleSwap(event: Swap): void {
     return
   }
 
+  let bundle = Bundle.load("1");
+  if (!bundle) {
+    log.debug("swap event, but bundle doesn't exist: {}", ["1"])
+    return
+  }
+
   const amount0In  = convertTokenToDecimal(event.params.amount0In, token0.decimals);
   const amount1In  = convertTokenToDecimal(event.params.amount1In, token1.decimals);
   const amount0Out = convertTokenToDecimal(event.params.amount0Out, token0.decimals);
@@ -516,6 +526,7 @@ export function handleSwap(event: Swap): void {
   // update global values, only used tracked amounts for volume
   let nomiswap = NomiswapFactory.load(FACTORY_ADDRESS)!;
   nomiswap.totalVolumeUSD = nomiswap.totalVolumeUSD.plus(trackedAmountUSD);
+  nomiswap.totalVolumeBNB = bundle.bnbPrice.notEqual(ZERO_BD) ? nomiswap.totalVolumeUSD.div(bundle.bnbPrice) : nomiswap.totalVolumeBNB;
   nomiswap.totalTransactions = nomiswap.totalTransactions.plus(ONE_BI);
 
   // save entities
@@ -570,6 +581,8 @@ export function handleSwap(event: Swap): void {
 
   // swap specific updating
   nomiswapDayData.dailyVolumeUSD = nomiswapDayData.dailyVolumeUSD.plus(trackedAmountUSD);
+  nomiswapDayData.totalVolumeUSD = nomiswap.totalVolumeUSD;
+  nomiswapDayData.totalVolumeBNB = nomiswap.totalVolumeBNB;
   nomiswapDayData.save();
 
   // swap specific updating for pair

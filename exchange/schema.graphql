@@ -9,7 +9,7 @@ type NomiswapFactory @entity {
 
   # total volume
   totalVolumeUSD: BigDecimal!
-  # totalVolumeBNB: BigDecimal!
+  totalVolumeBNB: BigDecimal!
 
   # untracked values - less confident USD scores
   untrackedVolumeUSD: BigDecimal!
@@ -196,7 +196,7 @@ type NomiswapDayData @entity {
 
   date: Int!
 
-  # dailyVolumeBNB: BigDecimal!
+  dailyVolumeBNB: BigDecimal!
   dailyVolumeUSD: BigDecimal!
   # dailyVolumeUntracked: BigDecimal!
 
