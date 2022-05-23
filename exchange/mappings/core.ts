@@ -5,17 +5,162 @@ import {
   Token,
   NomiswapFactory,
   Transaction,
+  Mint as MintEvent,
+  Burn as BurnEvent,
   Swap as SwapEvent,
+  Bundle,
 } from "../generated/schema";
 import { Mint, Burn, Swap, Transfer, Sync } from "../generated/templates/Pair/Pair";
 import { updateNomiswapDayData, updatePairDayData, updatePairHourData, updateTokenDayData } from "./dayUpdates";
-import { deriveUSDPrice, getTrackedVolumeUSD } from "./pricing";
+import { deriveUSDPrice, getTrackedVolumeUSD, getTrackedLiquidityUSD, getBnbPriceInUSD } from "./pricing";
 import { convertTokenToDecimal, ADDRESS_ZERO, FACTORY_ADDRESS, ONE_BI, ZERO_BD, BI_18 } from "./utils";
 
+function isCompleteMint(mintId: string): boolean {
+  return (MintEvent.load(mintId) as MintEvent).sender !== null; // sufficient checks
+}
+
+export function handleTransfer(event: Transfer): void {
+  // Initial liquidity.
+  if (event.params.to.toHex() == ADDRESS_ZERO && event.params.value.equals(BigInt.fromI32(1000))) {
+    return;
+  }
+
+  // get pair and load contract
+  let pair = Pair.load(event.address.toHex());
+  if (!pair) {
+    log.debug("transfer event, but pair doesn't exist: {}", [event.address.toHex()])
+    return
+  }
+
+  // liquidity token amount being transferred
+  let value = convertTokenToDecimal(event.params.value, BI_18);
+
+  // get or create transaction
+  let transaction = Transaction.load(event.transaction.hash.toHex());
+  if (transaction === null) {
+    transaction = new Transaction(event.transaction.hash.toHex());
+    transaction.block = event.block.number;
+    transaction.timestamp = event.block.timestamp;
+    transaction.mints = [];
+    transaction.burns = [];
+    transaction.swaps = [];
+  }
+
+  // mints
+  let mints = transaction.mints;
+  if (event.params.from.toHex() == ADDRESS_ZERO) {
+    // create new mint if no mints so far or if last one is done already
+    if (mints.length === 0 || isCompleteMint(mints[mints.length - 1])) {
+      let mint = new MintEvent(
+          event.transaction.hash.toHex().concat("-").concat(BigInt.fromI32(mints.length).toString())
+      );
+      mint.transaction = transaction.id;
+      mint.pair = pair.id;
+      mint.to = event.params.to;
+      mint.liquidity = value;
+      mint.timestamp = transaction.timestamp;
+      mint.transaction = transaction.id;
+      mint.save();
+
+      // update mints in transaction
+      transaction.mints = mints.concat([mint.id]);
+
+      // save entities
+      transaction.save();
+    }
+  }
+
+  // case where direct send first on BNB withdrawals
+  if (event.params.to.toHex() == pair.id) {
+    let burns = transaction.burns;
+    let burn = new BurnEvent(
+        event.transaction.hash.toHex().concat("-").concat(BigInt.fromI32(burns.length).toString())
+    );
+    burn.transaction = transaction.id;
+    burn.pair = pair.id;
+    burn.liquidity = value;
+    burn.timestamp = transaction.timestamp;
+    burn.to = event.params.to;
+    burn.sender = event.params.from;
+    burn.needsComplete = true;
+    burn.transaction = transaction.id;
+    burn.save();
+
+    // TODO: Consider using .concat() for handling array updates to protect
+    // against unintended side effects for other code paths.
+    burns.push(burn.id);
+    transaction.burns = burns;
+    transaction.save();
+  }
+
+  // burn
+  if (event.params.to.toHex() == ADDRESS_ZERO && event.params.from.toHex() == pair.id) {
+    // this is a new instance of a logical burn
+    let burns = transaction.burns;
+    let burn: BurnEvent;
+    if (burns.length > 0) {
+      let currentBurn = BurnEvent.load(burns[burns.length - 1]) as BurnEvent;
+      if (currentBurn.needsComplete) {
+        burn = currentBurn as BurnEvent;
+      } else {
+        burn = new BurnEvent(
+            event.transaction.hash.toHex().concat("-").concat(BigInt.fromI32(burns.length).toString())
+        );
+        burn.transaction = transaction.id;
+        burn.needsComplete = false;
+        burn.pair = pair.id;
+        burn.liquidity = value;
+        burn.transaction = transaction.id;
+        burn.timestamp = transaction.timestamp;
+      }
+    } else {
+      burn = new BurnEvent(event.transaction.hash.toHex().concat("-").concat(BigInt.fromI32(burns.length).toString()));
+      burn.transaction = transaction.id;
+      burn.needsComplete = false;
+      burn.pair = pair.id;
+      burn.liquidity = value;
+      burn.transaction = transaction.id;
+      burn.timestamp = transaction.timestamp;
+    }
+
+    // if this logical burn included a fee mint, account for this
+    if (mints.length !== 0 && !isCompleteMint(mints[mints.length - 1])) {
+      let mint = MintEvent.load(mints[mints.length - 1]) as MintEvent;
+      burn.feeTo = mint.to;
+      burn.feeLiquidity = mint.liquidity;
+      // remove the logical mint
+      store.remove("Mint", mints[mints.length - 1]);
+      // update the transaction
+
+      // TODO: Consider using .slice().pop() to protect against unintended
+      // side effects for other code paths.
+      mints.pop();
+      transaction.mints = mints;
+      transaction.save();
+    }
+    burn.save();
+    // if accessing last one, replace it
+    if (burn.needsComplete) {
+      // TODO: Consider using .slice(0, -1).concat() to protect against
+      // unintended side effects for other code paths.
+      burns[burns.length - 1] = burn.id;
+    }
+    // else add new one
+    else {
+      // TODO: Consider using .concat() for handling array updates to protect
+      // against unintended side effects for other code paths.
+      burns.push(burn.id);
+    }
+    transaction.burns = burns;
+    transaction.save();
+  }
+
+  transaction.save();
+}
 
 export function handleSync(event: Sync): void {
   let pair = Pair.load(event.address.toHex());
-  if(!pair) {
+  if (!pair) {
     log.debug("sync event, but pair doesn't exist: {}", [event.address.toHex()])
     return
   }
@@ -33,14 +178,20 @@ export function handleSync(event: Sync): void {
   }
 
   let factory = NomiswapFactory.load(FACTORY_ADDRESS);
-
   if (!factory) {
     log.debug("sync event, but factory doesn't exist: {}", [FACTORY_ADDRESS])
     return
   }
 
-  const previousReserve0 = pair.reserve0;
-  const previousReserve1 = pair.reserve1;
+  let bundle = Bundle.load("1");
+  if (!bundle) {
+    log.debug("sync event, but bundle doesn't exist: {}", ["1"])
+    return
+  }
+
+  const bnbPrice = getBnbPriceInUSD();
+  bundle.bnbPrice = bnbPrice;
+  bundle.save();
 
   // reset token total liquidity amounts
   // if this is the first SYNC event for this pair
@@ -72,6 +223,9 @@ export function handleSync(event: Sync): void {
   token0.totalLiquidity = token0.totalLiquidity.plus(reserve0);
   token1.totalLiquidity = token1.totalLiquidity.plus(reserve1);
 
+  pair.token0Price = reserve1.notEqual(ZERO_BD) ? reserve0.div(reserve1) : ZERO_BD;
+  pair.token1Price = reserve0.notEqual(ZERO_BD) ? reserve1.div(reserve0) : ZERO_BD;
+
 
   // if (pair.id == "0x8e50d726e2ea87a27fa94760d4e65d58c3ad8b44") {
   //   log.warning("[sync] usdt-busd reserve0={} reserve1={} raw_reserve0={} raw_reserve1={} token0.decimals={} token1.decimals={}", [
@@ -87,6 +241,8 @@ export function handleSync(event: Sync): void {
   const deriveResponse = deriveUSDPrice(reserve0, reserve1, token0, token1)
   const token0UsdPrice = deriveResponse.token0PriceUsd; 
   const token1UsdPrice = deriveResponse.token1PriceUsd;
+  const token0BnbPrice = bnbPrice.notEqual(ZERO_BD) ? token0UsdPrice.div(bnbPrice) : ZERO_BD;
+  const token1BnbPrice = bnbPrice.notEqual(ZERO_BD) ? token1UsdPrice.div(bnbPrice) : ZERO_BD;
 
   // if (pair.id == "0x8e50d726e2ea87a27fa94760d4e65d58c3ad8b44") {
   //   log.warning("[sync] usdt-busd raw_reserve0={} raw_reserve1={} token0.decimals={} token1.decimals={}", [
@@ -121,7 +277,9 @@ export function handleSync(event: Sync): void {
     token0.trackedTotalLiquidityUSD = token0.trackedTotalLiquidityUSD.plus(pair.reserve0LiquidityUSD)
     token1.trackedTotalLiquidityUSD = token1.trackedTotalLiquidityUSD.plus(pair.reserve1LiquidityUSD)
     token0.derivedUSD = token0UsdPrice;
+    token0.derivedBNB = token0BnbPrice;
     token1.derivedUSD = token1UsdPrice;
+    token1.derivedBNB = token1BnbPrice;
   } else {
     log.debug("Pair zero liqudity pair={} token0UsdPrice={} token1UsdPrice={}", [
       pair.id,
@@ -133,17 +291,176 @@ export function handleSync(event: Sync): void {
     // no need to subtract liqudity from tokens, as we subtracted it at the earlier step (if it was no 0)
   }
 
+  // get tracked liquidity
+  const trackedLiquidityUSD = getTrackedLiquidityUSD(reserve0, token0, reserve1, token1);
+  const trackedLiquidityBNB = bnbPrice.notEqual(ZERO_BD) ? trackedLiquidityUSD.div(bnbPrice) : ZERO_BD;
+
+  pair.trackedReserveUSD = trackedLiquidityUSD;
+  pair.trackedReserveBNB = trackedLiquidityBNB;
+  pair.reserveUSD = reserve0.times(token0UsdPrice)
+      .plus(reserve1.times(token1UsdPrice));
+  pair.reserveBNB = reserve0.times(token0BnbPrice)
+      .plus(reserve1.times(token1BnbPrice));
+
+  factory.totalLiquidityUSD = factory.totalLiquidityUSD.plus(trackedLiquidityUSD);
+  factory.totalLiquidityBNB = factory.totalLiquidityBNB.plus(trackedLiquidityBNB);
+
   // TODO: price dilation
 
   token0.save()
   token1.save()
   pair.save()
+  factory.save()
 }
 
+export function handleMint(event: Mint): void {
+  let transaction = Transaction.load(event.transaction.hash.toHex());
+  if (!transaction) {
+    log.debug("mint event, but transaction doesn't exist: {}", [event.transaction.hash.toHex()])
+    return
+  }
+
+  let mints = transaction.mints;
+  let mint = MintEvent.load(mints[mints.length - 1]);
+  if (!mint) {
+    log.debug("mint event, but mint doesn't exist: {}", [mints[mints.length - 1]])
+    return
+  }
+
+  let pair = Pair.load(event.address.toHex());
+  if (!pair) {
+    log.debug("mint event, but pair doesn't exist: {}", [event.address.toHex()])
+    return
+  }
+
+  let factory = NomiswapFactory.load(FACTORY_ADDRESS);
+  if (!factory) {
+    log.debug("mint event, but factory doesn't exist: {}", [FACTORY_ADDRESS])
+    return
+  }
+
+  let token0 = Token.load(pair.token0);
+  if (!token0) {
+    log.debug("mint event, but token0 doesn't exist: {}", [pair.token0])
+    return
+  }
+
+  let token1 = Token.load(pair.token1);
+  if (!token1) {
+    log.debug("mint event, but token1 doesn't exist: {}", [pair.token1])
+    return
+  }
+
+  // update exchange info (except balances, sync will cover that)
+  let token0Amount = convertTokenToDecimal(event.params.amount0, token0.decimals);
+  let token1Amount = convertTokenToDecimal(event.params.amount1, token1.decimals);
+
+  // update txn counts
+  token0.totalTransactions = token0.totalTransactions.plus(ONE_BI);
+  token1.totalTransactions = token1.totalTransactions.plus(ONE_BI);
+
+  let amountTotalUSD = token0.derivedUSD.times(token0Amount)
+      .plus(token1.derivedUSD.times(token1Amount));
+
+  // update txn counts
+  pair.totalTransactions = pair.totalTransactions.plus(ONE_BI);
+  factory.totalTransactions = factory.totalTransactions.plus(ONE_BI);
+
+  // save entities
+  token0.save();
+  token1.save();
+  pair.save();
+  factory.save();
+
+  mint.sender = event.params.sender;
+  mint.amount0 = token0Amount;
+  mint.amount1 = token1Amount;
+  mint.logIndex = event.logIndex;
+  mint.amountUSD = amountTotalUSD;
+  mint.save();
+
+  updatePairDayData(event);
+  updatePairHourData(event);
+  updateNomiswapDayData(event);
+  updateTokenDayData(token0, event);
+  updateTokenDayData(token1, event);
+}
+
+export function handleBurn(event: Burn): void {
+  let transaction = Transaction.load(event.transaction.hash.toHex());
+  if (transaction === null) {
+    return;
+  }
+
+  let burns = transaction.burns;
+  let burn = BurnEvent.load(burns[burns.length - 1]);
+  if (!burn) {
+    log.debug("burn event, but burn doesn't exist: {}", [burns[burns.length - 1]])
+    return
+  }
+
+  let pair = Pair.load(event.address.toHex());
+  if (!pair) {
+    log.debug("burn event, but pair doesn't exist: {}", [event.address.toHex()])
+    return
+  }
+
+  let factory = NomiswapFactory.load(FACTORY_ADDRESS);
+  if (!factory) {
+    log.debug("burn event, but factory doesn't exist: {}", [FACTORY_ADDRESS])
+    return
+  }
+
+  // update token info
+  let token0 = Token.load(pair.token0);
+  if (!token0) {
+    log.debug("burn event, but token0 doesn't exist: {}", [pair.token0])
+    return
+  }
+
+  let token1 = Token.load(pair.token1);
+  if (!token1) {
+    log.debug("burn event, but token1 doesn't exist: {}", [pair.token1])
+    return
+  }
+
+  let token0Amount = convertTokenToDecimal(event.params.amount0, token0.decimals);
+  let token1Amount = convertTokenToDecimal(event.params.amount1, token1.decimals);
+
+  // update txn counts
+  token0.totalTransactions = token0.totalTransactions.plus(ONE_BI);
+  token1.totalTransactions = token1.totalTransactions.plus(ONE_BI);
+
+  let amountTotalUSD = token0.derivedUSD.times(token0Amount)
+      .plus(token1.derivedUSD.times(token1Amount));
+
+  // update txn counts
+  factory.totalTransactions = factory.totalTransactions.plus(ONE_BI);
+  pair.totalTransactions = pair.totalTransactions.plus(ONE_BI);
+
+  // update global counter and save
+  token0.save();
+  token1.save();
+  pair.save();
+  factory.save();
+
+  // update burn
+  burn.amount0 = token0Amount;
+  burn.amount1 = token1Amount;
+  burn.logIndex = event.logIndex;
+  burn.amountUSD = amountTotalUSD;
+  burn.save();
+
+  updatePairDayData(event);
+  updatePairHourData(event);
+  updateNomiswapDayData(event);
+  updateTokenDayData(token0, event);
+  updateTokenDayData(token1, event);
+}
 
 export function handleSwap(event: Swap): void {
   const pair = Pair.load(event.address.toHex())
-  if(!pair) {
+  if (!pair) {
     log.debug("swap event, but pair doesn't exist: {}", [event.address.toHex()])
     return
   }
@@ -213,6 +530,8 @@ export function handleSwap(event: Swap): void {
     transaction.block = event.block.number;
     transaction.timestamp = event.block.timestamp;
     transaction.swaps = [];
+    transaction.mints = [];
+    transaction.burns = [];
   }
   let swaps = transaction.swaps;
   let swap = new SwapEvent(event.transaction.hash.toHex().concat("-").concat(BigInt.fromI32(swaps.length).toString()));

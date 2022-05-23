@@ -7,6 +7,8 @@ import { ZERO_BD, factoryContract, ADDRESS_ZERO, ONE_BD } from "./utils";
 const BUSD_ADDRESS = "0xe9e7cea3dedca5984780bafc599bd69add087d56"
 const ADDRESS_USDT = "0x55d398326f99059ff775485246999027b3197955";
 const ADDRESS_USDC = "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d";
+const WBNB_ADDRESS = "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c";
+const USDT_WBNB_PAIR = "0xe2bbf54dc0ccdd0cf6270f2af2f62ff79903bb27";
 
 const STABLE_COIN_ADDRESSES = [BUSD_ADDRESS, ADDRESS_USDT, ADDRESS_USDC]
 
@@ -23,6 +25,15 @@ const WHITELIST: string[] = [
   "0x2170ed0880ac9a755fd29b2688956bd959f933f8", // WETH
   "0xd32d01a43c869edcd1117c640fbdcfcfd97d9d65", // NMX
 ];
+
+export function getBnbPriceInUSD(): BigDecimal {
+  const usdtPair = Pair.load(USDT_WBNB_PAIR); // usdt is token0
+  if (usdtPair !== null) {
+    return usdtPair.token0Price;
+  } else {
+    return ZERO_BD;
+  }
+}
 
 export function deriveUSDPrice(
   reserve0: BigDecimal,
@@ -118,5 +129,33 @@ export function getTrackedVolumeUSD(
   }
 
   // neither token has derived price
+  return ZERO_BD;
+}
+
+export function getTrackedLiquidityUSD(
+    tokenAmount0: BigDecimal,
+    token0: Token,
+    tokenAmount1: BigDecimal,
+    token1: Token
+): BigDecimal {
+  let price0 = token0.derivedUSD;
+  let price1 = token1.derivedUSD;
+
+  // both are priced tokens, take average of both amounts
+  if (price0.gt(ZERO_BD) && price1.gt(ZERO_BD)) {
+    return tokenAmount0.times(price0).plus(tokenAmount1.times(price1));
+  }
+
+  // take double value of the priced token amount
+  if (price0.gt(ZERO_BD)) {
+    return tokenAmount0.times(price0).times(BigDecimal.fromString("2"));
+  }
+
+  // take double value of the priced token amount
+  if (price1.gt(ZERO_BD)) {
+    return tokenAmount1.times(price1).times(BigDecimal.fromString("2"));
+  }
+
+  // neither token has price, tracked volume is 0
   return ZERO_BD;
 }
