@@ -1,6 +1,6 @@
 specVersion: 0.0.2
 description: Nomiswap is a decentralized protocol for automated token exchange on Binance Smart Chain.
-repository: https://github.com/chopachom/nomiswap-subgraph
+repository: https://github.com/nominex/nomiswap-subgraph
 schema:
   file: ./schema.graphql
 dataSources:
