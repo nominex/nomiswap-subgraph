@@ -31,6 +31,33 @@ dataSources:
       eventHandlers:
         - event: PairCreated(indexed address,indexed address,address,uint256)
           handler: handlePairCreated
+  - kind: ethereum/contract
+    name: StableFactory
+    network: bsc
+    source:
+      address: '0xC6B7ee49D386bAe4FD501F2d2f8d18828F1f6285'
+      abi: StableFactory
+      startBlock: 21172052
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.5
+      language: wasm/assemblyscript
+      file: ./mappings/factory.ts
+      entities:
+        - Pair
+        - Token
+      abis:
+        - name: StableFactory
+          file: ./abis/StableFactory.json
+        - name: ERC20
+          file: ./abis/ERC20.json
+        - name: ERC20NameBytes
+          file: ./abis/ERC20NameBytes.json
+        - name: ERC20SymbolBytes
+          file: ./abis/ERC20SymbolBytes.json
+      eventHandlers:
+        - event: PairCreated(indexed address,indexed address,address,uint256)
+          handler: handlePairCreated
 templates:
   - kind: ethereum/contract
     name: Pair
@@ -48,6 +75,8 @@ templates:
       abis:
         - name: Factory
           file: ./abis/Factory.json
+        - name: StableFactory
+          file: ./abis/StableFactory.json
         - name: Pair
           file: ./abis/Pair.json
       eventHandlers:
