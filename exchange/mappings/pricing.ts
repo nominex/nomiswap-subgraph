@@ -1,16 +1,16 @@
 /* eslint-disable prefer-const */
-import { BigDecimal, Address } from "@graphprotocol/graph-ts/index";
+import { BigDecimal } from "@graphprotocol/graph-ts/index";
 import { Pair, Token } from "../generated/schema";
-import { ZERO_BD, factoryContract, ADDRESS_ZERO, ONE_BD } from "./utils";
+import { ZERO_BD, ONE_BD } from "./utils";
 
 
 const BUSD_ADDRESS = "0xe9e7cea3dedca5984780bafc599bd69add087d56"
-const ADDRESS_USDT = "0x55d398326f99059ff775485246999027b3197955";
-const ADDRESS_USDC = "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d";
+const USDT_ADDRESS = "0x55d398326f99059ff775485246999027b3197955";
+const USDC_ADDRESS = "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d";
 const WBNB_ADDRESS = "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c";
 const USDT_WBNB_PAIR = "0xe2bbf54dc0ccdd0cf6270f2af2f62ff79903bb27";
 
-const STABLE_COIN_ADDRESSES = [BUSD_ADDRESS, ADDRESS_USDT, ADDRESS_USDC]
+const STABLE_COIN_ADDRESSES = [BUSD_ADDRESS, USDT_ADDRESS, USDC_ADDRESS]
 
 // от балды 
 const MIN_USD_LIQUIDITY = BigDecimal.fromString("20000")
@@ -41,8 +41,15 @@ export function deriveUSDPrice(
   token0: Token,
   token1: Token,
 ): DeriveUSDPriceResponse {
+  if (STABLE_COIN_ADDRESSES.includes(token0.id) && STABLE_COIN_ADDRESSES.includes(token1.id)) {
+    const token0PriceUsd = ONE_BD
+    const token1PriceUsd = ONE_BD
+
+    return {token0PriceUsd, token1PriceUsd}
+  }
+
   if (STABLE_COIN_ADDRESSES.includes(token0.id)) {
-    const token0PriceUsd = BigDecimal.fromString("1.0")
+    const token0PriceUsd = ONE_BD
     const token1PriceUsd = _deriveUsdPrice(reserve0, reserve1)
 
     return {token0PriceUsd, token1PriceUsd}
@@ -50,7 +57,7 @@ export function deriveUSDPrice(
   
   if (STABLE_COIN_ADDRESSES.includes(token1.id)) {
     const token0PriceUsd = _deriveUsdPrice(reserve1, reserve0)
-    const token1PriceUsd = BigDecimal.fromString("1.0")
+    const token1PriceUsd = ONE_BD
 
     return {token0PriceUsd, token1PriceUsd}
   } 

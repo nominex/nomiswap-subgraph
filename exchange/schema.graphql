@@ -99,6 +99,7 @@ type Pair @entity {
 
   block: BigInt!
   timestamp: BigInt!
+  factory: NomiswapFactory!
 
   # derived fields
   # pairHourData: [PairHourData!]! @derivedFrom(field: "pair")

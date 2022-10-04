@@ -3,7 +3,6 @@ import { NomiswapFactory, Pair, Token, Bundle } from "../generated/schema";
 import { Pair as PairTemplate } from "../generated/templates";
 import { PairCreated } from "../generated/Factory/Factory";
 import {
-  FACTORY_ADDRESS,
   ZERO_BD,
   ZERO_BI,
   ONE_BI,
@@ -13,9 +12,9 @@ import {
 } from "./utils";
 
 export function handlePairCreated(event: PairCreated): void {
-  let factory = NomiswapFactory.load(FACTORY_ADDRESS);
+  let factory = NomiswapFactory.load(event.address.toHex());
   if (factory === null) {
-    factory = new NomiswapFactory(FACTORY_ADDRESS);
+    factory = new NomiswapFactory(event.address.toHex());
     factory.totalPairs = ZERO_BI;
     factory.totalTransactions = ZERO_BI;
     factory.totalLiquidityBNB = ZERO_BD;
@@ -84,6 +83,7 @@ export function handlePairCreated(event: PairCreated): void {
   pair.token1Price = ZERO_BD;
   pair.block = event.block.number;
   pair.timestamp = event.block.timestamp;
+  pair.factory = factory.id;
   pair.save();
 
   PairTemplate.create(event.params.pair);

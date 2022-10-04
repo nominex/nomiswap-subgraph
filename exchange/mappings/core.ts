@@ -11,9 +11,19 @@ import {
   Bundle,
 } from "../generated/schema";
 import { Mint, Burn, Swap, Transfer, Sync } from "../generated/templates/Pair/Pair";
+import { RampA, StopRampA } from "../generated/templates/StablePair/StablePair";
+import { StablePairParams } from "./stable-pair";
 import { updateNomiswapDayData, updatePairDayData, updatePairHourData, updateTokenDayData } from "./dayUpdates";
 import { deriveUSDPrice, getTrackedVolumeUSD, getTrackedLiquidityUSD, getBnbPriceInUSD } from "./pricing";
-import { convertTokenToDecimal, ADDRESS_ZERO, FACTORY_ADDRESS, ONE_BI, ZERO_BD, BI_18 } from "./utils";
+import {
+  convertTokenToDecimal,
+  isStablePairFactory,
+  ADDRESS_ZERO,
+  ONE_BI,
+  ZERO_BI,
+  ZERO_BD,
+  BI_18
+} from "./utils";
 
 function isCompleteMint(mintId: string): boolean {
   return (MintEvent.load(mintId) as MintEvent).sender !== null; // sufficient checks
@@ -177,9 +187,9 @@ export function handleSync(event: Sync): void {
     return
   }
 
-  let factory = NomiswapFactory.load(FACTORY_ADDRESS);
+  let factory = NomiswapFactory.load(pair.factory);
   if (!factory) {
-    log.debug("sync event, but factory doesn't exist: {}", [FACTORY_ADDRESS])
+    log.debug("sync event, but factory doesn't exist: {}", [pair.factory])
     return
   }
 
@@ -216,10 +226,12 @@ export function handleSync(event: Sync): void {
     token1.trackedTotalLiquidityUSD = token1.trackedTotalLiquidityUSD.minus(pair.reserve1LiquidityUSD)
   }
 
-
   // updating pair reserves
-  const reserve0 = convertTokenToDecimal(event.params.reserve0, token0.decimals);
-  const reserve1 = convertTokenToDecimal(event.params.reserve1, token1.decimals);
+  const reserve0bi = event.params.reserve0;
+  const reserve1bi = event.params.reserve1;
+
+  const reserve0 = convertTokenToDecimal(reserve0bi, token0.decimals);
+  const reserve1 = convertTokenToDecimal(reserve1bi, token1.decimals);
 
   pair.reserve0 = reserve0;
   pair.reserve1 = reserve1;
@@ -227,9 +239,18 @@ export function handleSync(event: Sync): void {
   token0.totalLiquidity = token0.totalLiquidity.plus(reserve0);
   token1.totalLiquidity = token1.totalLiquidity.plus(reserve1);
 
-  pair.token0Price = reserve1.notEqual(ZERO_BD) ? reserve0.div(reserve1) : ZERO_BD;
-  pair.token1Price = reserve0.notEqual(ZERO_BD) ? reserve1.div(reserve0) : ZERO_BD;
+  if (isStablePairFactory(factory.id)) {
+    if (reserve0bi.notEqual(ZERO_BI) && reserve1bi.notEqual(ZERO_BI)) {
+      const params = StablePairParams.getOrInit(pair);
+      const price = params.newPrice(token0, token1, reserve0bi, reserve1bi, event.block.timestamp);
 
+      pair.token0Price = price.token0Price;
+      pair.token1Price = price.token1Price;
+    }
+  } else {
+    pair.token0Price = reserve1.notEqual(ZERO_BD) ? reserve0.div(reserve1) : ZERO_BD;
+    pair.token1Price = reserve0.notEqual(ZERO_BD) ? reserve1.div(reserve0) : ZERO_BD;
+  }
 
   // if (pair.id == "0x8e50d726e2ea87a27fa94760d4e65d58c3ad8b44") {
   //   log.warning("[sync] usdt-busd reserve0={} reserve1={} raw_reserve0={} raw_reserve1={} token0.decimals={} token1.decimals={}", [
@@ -337,9 +358,9 @@ export function handleMint(event: Mint): void {
     return
   }
 
-  let factory = NomiswapFactory.load(FACTORY_ADDRESS);
+  let factory = NomiswapFactory.load(pair.factory);
   if (!factory) {
-    log.debug("mint event, but factory doesn't exist: {}", [FACTORY_ADDRESS])
+    log.debug("mint event, but factory doesn't exist: {}", [pair.factory])
     return
   }
 
@@ -409,9 +430,9 @@ export function handleBurn(event: Burn): void {
     return
   }
 
-  let factory = NomiswapFactory.load(FACTORY_ADDRESS);
+  let factory = NomiswapFactory.load(pair.factory);
   if (!factory) {
-    log.debug("burn event, but factory doesn't exist: {}", [FACTORY_ADDRESS])
+    log.debug("burn event, but factory doesn't exist: {}", [pair.factory])
     return
   }
 
@@ -503,18 +524,15 @@ export function handleSwap(event: Swap): void {
     token1,
   );
 
-    // update token0 global volume and token liquidity stats
+  // update token0 global volume and token liquidity stats
   token0.tradeVolume = token0.tradeVolume.plus(amount0In.plus(amount0Out));
   token0.tradeVolumeUSD = token0.tradeVolumeUSD.plus(trackedAmountUSD);
   token0.totalTransactions = token0.totalTransactions.plus(ONE_BI);
 
-  
   // update token1 global volume and token liquidity stats
   token1.tradeVolume = token1.tradeVolume.plus(amount1In.plus(amount1Out));
   token1.tradeVolumeUSD = token1.tradeVolumeUSD.plus(trackedAmountUSD);
   token1.totalTransactions = token1.totalTransactions.plus(ONE_BI);
-
-
 
   // update pair volume data, use tracked amount if we have it as its probably more accurate
   pair.volumeUSD = pair.volumeUSD.plus(trackedAmountUSD);
@@ -524,7 +542,7 @@ export function handleSwap(event: Swap): void {
   pair.save();
 
   // update global values, only used tracked amounts for volume
-  let nomiswap = NomiswapFactory.load(FACTORY_ADDRESS)!;
+  let nomiswap = NomiswapFactory.load(pair.factory)!;
   nomiswap.totalVolumeUSD = nomiswap.totalVolumeUSD.plus(trackedAmountUSD);
   nomiswap.totalVolumeBNB = bundle.bnbPrice.notEqual(ZERO_BD) ? nomiswap.totalVolumeUSD.div(bundle.bnbPrice) : nomiswap.totalVolumeBNB;
   nomiswap.totalTransactions = nomiswap.totalTransactions.plus(ONE_BI);
@@ -581,8 +599,6 @@ export function handleSwap(event: Swap): void {
 
   // swap specific updating
   nomiswapDayData.dailyVolumeUSD = nomiswapDayData.dailyVolumeUSD.plus(trackedAmountUSD);
-  nomiswapDayData.totalVolumeUSD = nomiswap.totalVolumeUSD;
-  nomiswapDayData.totalVolumeBNB = nomiswap.totalVolumeBNB;
   nomiswapDayData.save();
 
   // swap specific updating for pair
@@ -610,4 +626,26 @@ export function handleSwap(event: Swap): void {
     amount1Total.times(token1.derivedUSD)
   );
   token1DayData.save();
+}
+
+export function handleRampA(event: RampA) : void {
+  const pair = Pair.load(event.address.toHex());
+  if (pair != null) {
+    const params = StablePairParams.getOrInit(pair);
+    params.initialA = event.params.oldA;
+    params.initialATime = event.params.initialTime;
+    params.futureA = event.params.newA;
+    params.futureATime = event.params.futureTime;
+  }
+}
+
+export function handleStopRampA(event: StopRampA) : void {
+  const pair = Pair.load(event.address.toHex());
+  if (pair != null) {
+    const params = StablePairParams.getOrInit(pair);
+    params.initialA = event.params.A;
+    params.initialATime = event.params.t;
+    params.futureA = event.params.A;
+    params.futureATime = event.params.t;
+  }
 }
