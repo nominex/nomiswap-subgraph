@@ -2,10 +2,9 @@
 import { PairHourData } from "../generated/schema";
 import { BigInt, BigDecimal, ethereum } from "@graphprotocol/graph-ts";
 import { Pair, Token, NomiswapFactory, NomiswapDayData, PairDayData, TokenDayData } from "../generated/schema";
-import { ONE_BI, ZERO_BD, ZERO_BI, FACTORY_ADDRESS } from "./utils";
+import {FACTORY_ADDRESSES, ONE_BI, ZERO_BD, ZERO_BI} from "./utils";
 
 export function updateNomiswapDayData(event: ethereum.Event): NomiswapDayData {
-  let nomiswap = NomiswapFactory.load(FACTORY_ADDRESS)!;
   let timestamp = event.block.timestamp.toI32();
   let dayID = timestamp / 86400;
   let dayStartTimestamp = dayID * 86400;
@@ -16,10 +15,27 @@ export function updateNomiswapDayData(event: ethereum.Event): NomiswapDayData {
     nomiswapDayData.date = dayStartTimestamp;
     nomiswapDayData.dailyVolumeUSD = ZERO_BD;
     nomiswapDayData.totalVolumeUSD = ZERO_BD;
-
   }
-  nomiswapDayData.totalLiquidityUSD = nomiswap.totalLiquidityUSD;
-  nomiswapDayData.totalTransactions = nomiswap.totalTransactions;
+
+  let totalLiquidityUSD = ZERO_BD;
+  let totalTransactions = ZERO_BI;
+  let totalVolumeUSD = ZERO_BD;
+  let totalVolumeBNB = ZERO_BD;
+
+  for (let i = 0; i < FACTORY_ADDRESSES.length; ++i) {
+    const factory = NomiswapFactory.load(FACTORY_ADDRESSES[i]);
+    if (factory != null) {
+      totalLiquidityUSD = totalLiquidityUSD.plus(factory.totalLiquidityUSD);
+      totalTransactions = totalTransactions.plus(factory.totalTransactions);
+      totalVolumeUSD = totalVolumeUSD.plus(factory.totalVolumeUSD);
+      totalVolumeBNB = totalVolumeBNB.plus(factory.totalVolumeBNB);
+    }
+  }
+
+  nomiswapDayData.totalLiquidityUSD = totalLiquidityUSD;
+  nomiswapDayData.totalTransactions = totalTransactions;
+  nomiswapDayData.totalVolumeUSD = totalVolumeUSD;
+  nomiswapDayData.totalVolumeBNB = totalVolumeBNB;
   nomiswapDayData.save();
 
   return nomiswapDayData;

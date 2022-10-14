@@ -3,18 +3,25 @@ import { BigInt, BigDecimal, Address } from "@graphprotocol/graph-ts";
 import { ERC20 } from "../../generated/Factory/ERC20";
 import { ERC20NameBytes } from "../../generated/Factory/ERC20NameBytes";
 import { ERC20SymbolBytes } from "../../generated/Factory/ERC20SymbolBytes";
-import { Factory as FactoryContract } from "../../generated/templates/Pair/Factory";
 
-export let ADDRESS_ZERO = "0x0000000000000000000000000000000000000000";
-export let FACTORY_ADDRESS = "0xca143ce32fe78f1f7019d7d551a6402fc5350c73";
+export const ADDRESS_ZERO = "0x0000000000000000000000000000000000000000";
+export const FACTORY_ADDRESS = "0xca143ce32fe78f1f7019d7d551a6402fc5350c73";
+export const STABLE_FACTORY_ADDRESS = "0xc6b7ee49d386bae4fd501f2d2f8d18828f1f6285";
+export const FACTORY_ADDRESSES = [FACTORY_ADDRESS, STABLE_FACTORY_ADDRESS];
 
-export let ZERO_BI = BigInt.fromI32(0);
-export let ONE_BI = BigInt.fromI32(1);
-export let ZERO_BD = BigDecimal.fromString("0");
-export let ONE_BD = BigDecimal.fromString("1");
-export let BI_18 = BigInt.fromI32(18);
+export const ZERO_BI = BigInt.fromI32(0);
+export const ONE_BI = BigInt.fromI32(1);
+export const ZERO_BD = BigDecimal.fromString("0");
+export const ONE_BD = BigDecimal.fromString("1");
+export const BI_2 = BigInt.fromI32(2);
+export const BI_3 = BigInt.fromI32(3);
+export const BI_4 = BigInt.fromI32(4);
+export const BI_16 = BigInt.fromI32(16);
+export const BI_18 = BigInt.fromI32(18);
 
-export let factoryContract = FactoryContract.bind(Address.fromString(FACTORY_ADDRESS));
+export function isStablePairFactory(factoryAddress: string) : boolean {
+  return factoryAddress.toLowerCase() == STABLE_FACTORY_ADDRESS;
+}
 
 export function exponentToBigDecimal(decimals: BigInt): BigDecimal {
   let bd = BigDecimal.fromString("1");
