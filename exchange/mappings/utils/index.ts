@@ -5,7 +5,7 @@ import { ERC20NameBytes } from "../../generated/Factory/ERC20NameBytes";
 import { ERC20SymbolBytes } from "../../generated/Factory/ERC20SymbolBytes";
 
 export const ADDRESS_ZERO = "0x0000000000000000000000000000000000000000";
-export const FACTORY_ADDRESS = "0xca143ce32fe78f1f7019d7d551a6402fc5350c73";
+export const FACTORY_ADDRESS = "0xd6715a8be3944ec72738f0bfdc739d48c3c29349";
 export const STABLE_FACTORY_ADDRESS = "0xc6b7ee49d386bae4fd501f2d2f8d18828f1f6285";
 export const FACTORY_ADDRESSES = [FACTORY_ADDRESS, STABLE_FACTORY_ADDRESS];
 
