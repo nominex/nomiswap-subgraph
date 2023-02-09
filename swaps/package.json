@@ -1,0 +1,16 @@
+{
+  "name": "nomiswap-swaps",
+  "description": "Nomiswap Subgraph",
+  "version": "1.0.0",
+  "repository": "git@github.com:nominex/nomiswap-subgraph.git",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "codegen": "graph codegen subgraph.yaml",
+    "build": "graph build subgraph.yaml",
+    "deploy": "graph deploy --product hosted-service nominex/nomiswap-swaps-subgraph"
+  },
+  "dependencies": {
+    "@graphprotocol/graph-cli": "0.36.1",
+    "@graphprotocol/graph-ts": "0.29.0"
+  }
+}

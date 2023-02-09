@@ -1,0 +1,47 @@
+type Factory @entity(immutable: true) {
+  id: ID!
+}
+
+type Token @entity(immutable: true) {
+  id: ID!
+  name: String!
+  symbol: String!
+  decimals: BigInt!
+}
+
+type Pair @entity {
+  id: ID!
+  block: BigInt!
+  timestamp: BigInt!
+  name: String!
+  factory: Factory!
+  token0: Token!
+  token1: Token!
+  initialA: BigInt # for stable pairs only
+  initialATime: BigInt # for stable pairs only
+  futureA: BigInt # for stable pairs only
+  futureATime: BigInt # for stable pairs only
+}
+
+type Transaction @entity {
+  id: ID!
+  block: BigInt!
+  timestamp: BigInt!
+  gasUsed: BigInt
+  gasPrice: BigInt!
+  gasLimit: BigInt!
+}
+
+type Swap @entity(immutable: true) {
+  id: ID!
+  block: BigInt!
+  logIndex: BigInt!
+  timestamp: BigInt!
+  transaction: Transaction!
+  sender: Bytes!
+  pair: Pair!
+  amount0In: BigDecimal!
+  amount1In: BigDecimal!
+  amount0Out: BigDecimal!
+  amount1Out: BigDecimal!
+}
