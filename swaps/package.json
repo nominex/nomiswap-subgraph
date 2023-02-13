@@ -5,9 +5,12 @@
   "repository": "git@github.com:nominex/nomiswap-subgraph.git",
   "license": "GPL-3.0-or-later",
   "scripts": {
-    "codegen": "graph codegen subgraph.yaml",
+    "build-eth": "cp subgraph.eth.yaml subgraph.yaml && npm run build && npm run codegen",
+    "build-bsc": "cp subgraph.bsc.yaml subgraph.yaml && npm run build && npm run codegen",
+    "deploy-eth": "npm run build-eth && graph deploy --product hosted-service nominex/nomiswap-swaps-eth",
+    "deploy-bsc": "npm run build-bsc && graph deploy --product hosted-service nominex/nomiswap-swaps-bsc",
     "build": "graph build subgraph.yaml",
-    "deploy": "graph deploy --product hosted-service nominex/nomiswap-swaps-subgraph"
+    "codegen": "graph codegen subgraph.yaml"
   },
   "dependencies": {
     "@graphprotocol/graph-cli": "0.36.1",

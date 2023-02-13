@@ -1,20 +1,27 @@
 import { BigInt, BigDecimal } from "@graphprotocol/graph-ts";
 
-export const ONE_BI = BigInt.fromString('10');
-export const TEN_BI = BigInt.fromString('10');
+export const ZERO_BI = BigInt.fromI32(0);
+export const ONE_BI = BigInt.fromI32(1);
+export const ONE_BD = BigDecimal.fromString('1');
+export const TEN_BD = BigDecimal.fromString('10');
 
 export function isNullBnbValue(value: string): boolean {
     return value == "0x0000000000000000000000000000000000000000000000000000000000000001";
 }
 
-export function powBigInt(n: BigInt, exp: BigInt): BigInt {
-    for (let i = ONE_BI; i.lt(exp); i = i.plus(ONE_BI)) {
-        n = n.times(TEN_BI);
+export function exponentToBigDecimal(decimals: BigInt): BigDecimal {
+    let bd = ONE_BD;
+    for (let i = ZERO_BI; i.lt(decimals); i = i.plus(ONE_BI)) {
+        bd = bd.times(TEN_BD);
     }
 
-    return n;
+    return bd;
 }
 
-export function tokenAmountToBigDecimal(amount: BigInt, decimals: BigInt): BigDecimal {
-    return amount.toBigDecimal().div(powBigInt(TEN_BI, decimals).toBigDecimal());
+export function tokenAmountToBigDecimal(tokenAmount: BigInt, decimals: BigInt): BigDecimal {
+    if (decimals.equals(ZERO_BI)) {
+        return tokenAmount.toBigDecimal();
+    }
+
+    return tokenAmount.toBigDecimal().div(exponentToBigDecimal(decimals));
 }

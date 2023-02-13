@@ -1,6 +1,6 @@
 import { log } from "@graphprotocol/graph-ts";
 import { Swap } from "../generated/templates/Pair/Pair";
-import {Pair, Token, Swap as SwapEntity, Transaction} from "../generated/schema";
+import { Pair, Token, Swap as SwapEntity, Transaction } from "../generated/schema";
 import { tokenAmountToBigDecimal } from "../utils/common";
 
 export function handleSwap(event: Swap): void {
@@ -53,5 +53,6 @@ export function handleSwap(event: Swap): void {
     swap.amount0Out = amount0Out;
     swap.amount1In = amount1In;
     swap.amount1Out = amount1Out;
+    swap.order = event.block.number.leftShift(32).plus(event.logIndex);
     swap.save();
 }
