@@ -9,7 +9,7 @@ type Token @entity(immutable: true) {
   decimals: BigInt!
 }
 
-type Pair @entity {
+type Pair @entity(immutable: true) {
   id: ID!
   block: BigInt!
   timestamp: BigInt!
@@ -17,13 +17,9 @@ type Pair @entity {
   factory: Factory!
   token0: Token!
   token1: Token!
-  initialA: BigInt # for stable pairs only
-  initialATime: BigInt # for stable pairs only
-  futureA: BigInt # for stable pairs only
-  futureATime: BigInt # for stable pairs only
 }
 
-type Transaction @entity {
+type Transaction @entity(immutable: true) {
   id: ID!
   block: BigInt!
   timestamp: BigInt!
@@ -44,4 +40,5 @@ type Swap @entity(immutable: true) {
   amount1In: BigDecimal!
   amount0Out: BigDecimal!
   amount1Out: BigDecimal!
+  order: BigInt!
 }
